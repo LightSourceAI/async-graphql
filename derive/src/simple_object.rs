@@ -37,6 +37,7 @@ pub fn generate(object_args: &args::SimpleObject) -> GeneratorResult<TokenStream
     let shareable = object_args.shareable;
     let inaccessible = object_args.inaccessible;
     let interface_object = object_args.interface_object;
+    let mangle = object_args.mangle;
     let resolvable = matches!(object_args.resolvability, Resolvability::Resolvable);
     let tags = object_args
         .tags
@@ -128,6 +129,13 @@ pub fn generate(object_args: &args::SimpleObject) -> GeneratorResult<TokenStream
             &derived.ident
         } else {
             base_ident
+        };
+        let resolver_method_name = if mangle {
+            let original_string = ident.to_string();
+            let prefixed_string = format!("async_graphql_{}", original_string);
+            Ident::new(&prefixed_string, ident.span())
+        } else {
+            ident.clone()
         };
 
         let field_name = field.name.clone().unwrap_or_else(|| {
@@ -278,7 +286,7 @@ pub fn generate(object_args: &args::SimpleObject) -> GeneratorResult<TokenStream
             getters.push(quote! {
                  #[inline]
                  #[allow(missing_docs)]
-                 #vis async fn #ident(&self, ctx: &#crate_name::Context<'_>) -> #crate_name::Result<#ty> {
+                 #vis async fn #resolver_method_name(&self, ctx: &#crate_name::Context<'_>) -> #crate_name::Result<#ty> {
                      ::std::result::Result::Ok(#block)
                  }
             });
@@ -287,7 +295,7 @@ pub fn generate(object_args: &args::SimpleObject) -> GeneratorResult<TokenStream
                 if ctx.item.node.name.node == #field_name {
                     let f = async move {
                         #guard
-                        self.#ident(ctx).await.map_err(|err| err.into_server_error(ctx.item.pos))
+                        self.#resolver_method_name(ctx).await.map_err(|err| err.into_server_error(ctx.item.pos))
                     };
                     let obj = f.await.map_err(|err| ctx.set_error_path(err))?;
                     let ctx_obj = ctx.with_selection_set(&ctx.item.node.selection_set);
@@ -296,7 +304,7 @@ pub fn generate(object_args: &args::SimpleObject) -> GeneratorResult<TokenStream
             });
         } else {
             resolvers.push(quote! {
-                if let ::std::option::Option::Some(value) = #crate_name::ContainerType::resolve_field(&self.#ident, ctx).await? {
+                if let ::std::option::Option::Some(value) = #crate_name::ContainerType::resolve_field(&self.#resolver_method_name, ctx).await? {
                     return ::std::result::Result::Ok(std::option::Option::Some(value));
                 }
             });

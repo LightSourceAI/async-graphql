@@ -286,6 +286,8 @@ pub struct SimpleObject {
     pub guard: Option<Expr>,
     #[darling(default, multiple, rename = "directive")]
     pub directives: Vec<Expr>,
+    #[darling(default)]
+    pub mangle: bool,
 }
 
 #[derive(FromMeta, Default)]
